@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ Simplified EV Range Prediction App</title>
+    <style>
+        /* Basic CSS for a clean look */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .container {
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 450px;
+        }
+        h1 {
+            color: #007bff;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #28a745; /* Green for go/predict */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        #result-card {
+            margin-top: 25px;
+            padding: 15px;
+            border: 1px solid #007bff;
+            background-color: #e9f5ff;
+            border-radius: 4px;
+            text-align: center;
+            min-height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .loading {
+            color: #ffc107;
+        }
+        .error {
+            color: #dc3545;
+            border-color: #dc3545;
+            background-color: #f8d7da;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Range Prediction</h1>
+    
+    <div class="form-group">
+        <label for="car-model">EV Car Model</label>
+        <select id="car-model" required>
+            <option value="Tesla Model 3">Tesla Model 3</option>
+            <option value="BYD ATTO 3">BYD ATTO 3</option>
+            <option value="Unknown Car">Other (Uses Default Specs)</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="battery-percent">Current Battery Percentage (%)</label>
+        <input type="number" id="battery-percent" min="0" max="100" value="75" required>
+    </div>
+    
+    <button onclick="getPrediction()">Calculate Range</button>
+
+    <div id="result-card">
+        Enter values and press 'Calculate Range'
+    </div>
+</div>
+
+<script>
+    // 🛑 IMPORTANT: Replace this with your actual API Gateway URL 🛑
+    const API_GATEWAY_URL = 'YOUR_API_GATEWAY_ENDPOINT_HERE'; 
+
+    const resultCard = document.getElementById('result-card');
+
+    async function getPrediction() {
+        // Prevent multiple submissions while fetching
+        const button = document.querySelector('button');
+        button.disabled = true;
+        resultCard.innerHTML = '<span class="loading">Calculating... Please wait. (Using 60 km/h baseline speed)</span>';
+        resultCard.classList.remove('error');
+        
+        // 1. Get user inputs
+        const carModel = document.getElementById('car-model').value;
+        const batteryPercent = document.getElementById('battery-percent').value;
+        
+        // Basic input validation
+        if (!carModel || !batteryPercent) {
+            resultCard.innerHTML = '⚠️ Please fill in all fields.';
+            resultCard.classList.add('error');
+            button.disabled = false;
+            return;
+        }
+
+        // 2. Construct the JSON payload
+        // NOTE: 'Average_Speed_kmh' is INTENTIONALLY OMITTED. 
+        // The Lambda function will automatically default it to 60.0 km/h.
+        const payload = {
+            "Car_name": carModel,
+            "Battery_Level(%)": parseFloat(batteryPercent),
+            "Time": 1, // Dummy Time value for SiteWise logging
+            "Range_Remaining(km)": 0 // Dummy Actual Range
+        };
+
+        try {
+            // 3. Send POST request to API Gateway
+            const response = await fetch(API_GATEWAY_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*' // Essential for CORS
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            
+            // 4. Handle and display the result
+            if (response.ok) {
+                const predictedRange = result.predicted_range_km;
+                resultCard.innerHTML = `✅ Predicted Range: **${predictedRange.toFixed(1)} km**`;
+                resultCard.style.color = '#28a745';
+                resultCard.style.borderColor = '#28a745';
+                resultCard.style.backgroundColor = '#d4edda';
+            } else {
+                // Handle API errors (e.g., Lambda failed)
+                const errorMessage = result.error || result.message || 'Unknown backend error.';
+                resultCard.innerHTML = `❌ Prediction Failed: ${errorMessage}`;
+                resultCard.classList.add('error');
+            }
+        } catch (error) {
+            // Handle network errors (e.g., incorrect API URL, CORS issues)
+            console.error('Network or API Error:', error);
+            resultCard.innerHTML = '❌ An error occurred. Check Console/API Gateway configuration.';
+            resultCard.classList.add('error');
+        } finally {
+            // Re-enable the button
+            button.disabled = false;
+            resultCard.style.removeProperty('min-height');
+        }
+    }
+</script>
+</body>
+</html>
